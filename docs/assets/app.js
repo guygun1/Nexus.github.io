@@ -208,6 +208,7 @@
     var token = ++renderToken;
     if (tocObserver) { tocObserver.disconnect(); tocObserver = null; }
     var route = parseRoute();
+    document.body.classList.remove("sidebar-open");
     document.body.classList.toggle("is-home", route.kind === "home");
     topInput.value = route.kind === "search" ? (route.params.get("q") || "") : "";
     var done;
@@ -227,45 +228,90 @@
   }
 
   // ---------- views ----------
-  function tagChip(t, extra) {
+  var ICON_SEARCH = '<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M14.386 14.386l4.088 4.088-4.088-4.088A7.533 7.533 0 1 1 3.733 3.733a7.533 7.533 0 0 1 10.653 10.653z" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/></svg>';
+  var ICON_HOME = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"/></svg>';
+  var ICON_EDIT = '<svg width="14" height="14" viewBox="0 0 40 40" aria-hidden="true"><g fill="currentColor"><path d="m34.5 11.7-3 3.1-6.3-6.3 3.1-3q.5-.5 1.2-.5t1.1.5l3.9 3.9q.5.4.5 1.1t-.5 1.2zm-29.5 17.1 18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"/></g></svg>';
+
+  function tagBadge(t, href, on, label) {
     var n = DATA.tagCounts[t];
-    return '<a class="chip" href="' + tagHref(t) + '">' + esc(t) + (n ? " <small>" + n + "</small>" : "") + "</a>" + (extra || "");
+    return '<a class="tag' + (on ? " is-on" : "") + '" href="' + href + '"' + (label ? ' title="' + esc(label) + '"' : "") + ">" + esc(t) + (n && !on ? " <span>" + n + "</span>" : "") + "</a>";
   }
-  function cardForDir(d) {
-    var info = dirInfo(d);
-    return '<li><a class="card" href="' + dirHref(d) + '"><h3>' + esc(dirTitle(d)) + "</h3>" +
-      (info.description ? "<p>" + esc(info.description) + "</p>" : "") +
-      '<span class="count">' + plural(countUnder(d), "page") + "</span></a></li>";
+
+  function parentOf(dir) { return dirOf(dir); }
+
+  function sidebar(dir, activeId, onCategory) {
+    var items = [];
+    if (dir) {
+      var parent = parentOf(dir);
+      items.push('<li><a class="menu-link menu-up" href="' + (parent ? dirHref(parent) : "#/") + '">' + esc(parent ? dirTitle(parent) : "All documentation") + "</a></li>");
+      items.push('<li class="menu-title"><a href="' + dirHref(dir) + '"' + (onCategory ? ' aria-current="page"' : "") + ">" + esc(dirTitle(dir)) + "</a></li>");
+    }
+    var pages = pagesIn(dir);
+    pages.forEach(function (p) {
+      items.push('<li><a class="menu-link" href="' + pageHref(p.id) + '"' + (p.id === activeId ? ' aria-current="page"' : "") + ">" + esc(p.title) + "</a></li>");
+    });
+    var subs = childDirs(dir);
+    if (pages.length && subs.length) items.push('<li class="menu-sep" role="separator"></li>');
+    subs.forEach(function (d) {
+      items.push('<li><a class="menu-link has-sub" href="' + dirHref(d) + '">' + esc(dirTitle(d)) + "</a></li>");
+    });
+    return '<nav class="sidebar" id="sidebar" aria-label="Docs sidebar"><ul class="menu">' + items.join("") + "</ul></nav>";
   }
-  function cardForPage(p) {
-    return '<li><a class="card" href="' + pageHref(p.id) + '"><h3>' + esc(p.title) + "</h3>" +
-      (p.description ? "<p>" + esc(p.description) + "</p>" : "") + "</a></li>";
+  function withSidebar(dir, activeId, onCategory, main) {
+    document.body.classList.remove("no-sidebar");
+    return '<div class="docs">' + sidebar(dir, activeId, onCategory) + '<div class="docs-main">' + main + "</div></div>";
+  }
+  function noSidebar() { document.body.classList.add("no-sidebar"); }
+
+  function breadcrumbs(dir, last) {
+    var parts = dir ? dir.split("/") : [];
+    var items = ['<li><a href="#/" aria-label="Home">' + ICON_HOME + "</a></li>"];
+    parts.forEach(function (_, i) {
+      var d = parts.slice(0, i + 1).join("/");
+      var isLast = !last && i === parts.length - 1;
+      items.push("<li>" + (isLast ? '<span aria-current="page">' + esc(dirTitle(d)) + "</span>" : '<a href="' + dirHref(d) + '">' + esc(dirTitle(d)) + "</a>") + "</li>");
+    });
+    if (last) items.push('<li><span aria-current="page">' + esc(last) + "</span></li>");
+    return '<nav aria-label="Breadcrumbs"><ol class="crumbs">' + items.join("") + "</ol></nav>";
   }
 
   function renderHome() {
+    noSidebar();
     setTitle("");
-    var html = '<div class="wrap"><section class="hero"><h1>Nexus documentation</h1>' +
-      '<form class="search search-hero" role="search" id="search-hero" autocomplete="off">' +
+    var html = '<header class="hero"><div class="container"><h1>Nexus</h1><p>Documentation</p>' +
+      '<form class="hero-search" role="search" id="search-hero" autocomplete="off">' + ICON_SEARCH +
       '<label class="sr" for="q-hero">Search documentation</label>' +
-      '<input id="q-hero" type="search" placeholder="Search for anything" spellcheck="false"><kbd aria-hidden="true">/</kbd></form>' +
-      '<p class="hint">Narrow results with a tag, for example <code>tag:coding</code> or pick one below.</p></section>';
+      '<input id="q-hero" type="search" placeholder="Search the documentation" spellcheck="false"><kbd aria-hidden="true">/</kbd></form>' +
+      '<p class="home-hint">Narrow by tag with <code>tag:coding</code></p></div></header><div class="container home-body">';
     if (!DATA.pages.length) {
-      html += '<div class="empty"><h2>No documentation yet</h2>' +
-        "<p>Add a Markdown file such as <code>docs/documentation/coding/from_scratch/rendering/main.md</code>, then run <code>node docs/scripts/build-index.mjs</code>. The GitHub Action does this automatically after you push.</p>" +
-        "<p>The full guide is in <code>docs/documentation/README.md</code>.</p></div>";
+      html += '<div class="admonition"><h3>No documentation yet</h3>' +
+        "<p>Add a Markdown file such as <code>docs/documentation/coding/from_scratch/rendering/main.md</code>, then run <code>node docs/scripts/build-index.mjs</code>. The GitHub Action does this after you push.</p>" +
+        "<p>The page format is described in <code>docs/documentation/README.md</code>.</p></div>";
     } else {
-      var tags = sortedTags();
-      if (tags.length) html += '<h2 class="section-title">Browse by tag</h2><ul class="chips">' + tags.map(function (t) { return "<li>" + tagChip(t) + "</li>"; }).join("") + "</ul>";
       var top = childDirs("");
-      if (top.length) html += '<h2 class="section-title">Categories</h2><ul class="cards">' + top.map(cardForDir).join("") + "</ul>";
+      if (top.length) {
+        html += "<h2>Categories</h2><ul class=\"features\">" + top.map(function (d) {
+          var info = dirInfo(d);
+          return '<li><h3><a href="' + dirHref(d) + '">' + esc(dirTitle(d)) + "</a></h3>" +
+            (info.description ? "<p>" + esc(info.description) + "</p>" : "") +
+            "<small>" + plural(countUnder(d), "page") + "</small></li>";
+        }).join("") + "</ul>";
+      }
       var loose = pagesIn("");
-      if (loose.length) html += '<h2 class="section-title">Pages</h2><ul class="cards">' + loose.map(cardForPage).join("") + "</ul>";
+      if (loose.length) html += "<h2>Pages</h2><ul class=\"doc-list\">" + loose.map(docListItem).join("") + "</ul>";
+      var tags = sortedTags();
+      if (tags.length) html += "<h2>Tags</h2><ul class=\"tag-list\">" + tags.map(function (t) { return "<li>" + tagBadge(t, tagHref(t)) + "</li>"; }).join("") + "</ul>";
     }
     view.innerHTML = html + "</div>";
     bindSearchInput(document.getElementById("q-hero"), document.getElementById("search-hero"), true);
   }
 
+  function docListItem(p) {
+    return '<li><a href="' + pageHref(p.id) + '">' + esc(p.title) + "</a>" + (p.description ? "<p>" + esc(p.description) + "</p>" : "") + "</li>";
+  }
+
   function renderSearch(route) {
+    noSidebar();
     var q = route.params.get("q") || "";
     var parsed = parseQuery(q);
     var tags = route.params.getAll("tag").map(function (t) { return t.toLowerCase(); }).concat(parsed.tags);
@@ -274,75 +320,55 @@
     var res = search(parsed.words, tags);
     setTitle(q ? "Search: " + q : tags.length ? "Tag: " + tags.join(", ") : "Search");
 
-    // tag chips to add: tags present among the current hits, minus those already chosen
     var counts = {};
     res.hits.forEach(function (h) { h.p.tags.forEach(function (t) { if (tags.indexOf(t) < 0) counts[t] = (counts[t] || 0) + 1; }); });
     var addable = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a] || collator.compare(a, b); }).slice(0, 12);
 
-    var html = '<div class="wrap"><div class="view-head"><h1>' +
-      (q && !tags.length ? "Search results" : tags.length && !rawQ ? "Tagged " + esc(tags.join(" + ")) : "Search results") +
-      "</h1></div>";
-    html += '<div class="filters">';
+    var html = '<div class="container search-page"><h1>' + (rawQ ? "Search results" : tags.length ? "Tagged: " + esc(tags.join(", ")) : "Search results") + "</h1>";
     if (tags.length) {
-      html += '<span class="label">Filtering by</span>' + tags.map(function (t) {
-        var rest = tags.filter(function (x) { return x !== t; });
-        return '<a class="chip is-on" href="' + searchHref(rawQ, rest) + '" title="Remove tag ' + esc(t) + '">' + esc(t) + " <small>remove</small></a>";
-      }).join("");
+      html += '<div class="filter-row"><b>Filtering by tag</b>' + tags.map(function (t) {
+        return '<a class="tag is-on" href="' + searchHref(rawQ, tags.filter(function (x) { return x !== t; })) + '" title="Remove this tag filter">' + esc(t) + " ×</a>";
+      }).join("") + "</div>";
     }
     if (addable.length) {
-      html += '<span class="label">' + (tags.length ? "Add tag" : "Tags") + "</span>" + addable.map(function (t) {
-        return '<a class="chip" href="' + searchHref(rawQ, tags.concat(t)) + '">' + esc(t) + " <small>" + counts[t] + "</small></a>";
-      }).join("");
+      html += '<div class="filter-row"><b>' + (tags.length ? "Add tag" : "Tags") + "</b>" + addable.map(function (t) {
+        return '<a class="tag" href="' + searchHref(rawQ, tags.concat(t)) + '">' + esc(t) + " <span>" + counts[t] + "</span></a>";
+      }).join("") + "</div>";
     }
-    html += "</div>";
-
     if (!res.hits.length) {
-      html += '<div class="empty"><h2>Nothing matched</h2><p>Try fewer or shorter words' + (tags.length ? ", or remove a tag filter" : "") + ".</p></div>";
+      html += '<div class="admonition" style="margin-top:1.25rem"><h3>Nothing matched</h3><p>Try fewer or shorter words' + (tags.length ? ", or remove a tag filter" : "") + ".</p></div>";
     } else {
-      html += '<p class="note">' + plural(res.hits.length, "page") + (res.partial ? " matching some of your words" : "") + "</p>";
+      html += '<p class="result-count">' + plural(res.hits.length, "page") + (res.partial ? " matching some of your words" : "") + " found</p>";
       html += '<ul class="results">' + res.hits.slice(0, 50).map(function (h) {
-        var p = h.p;
-        var snip = snippet(p, parsed.words);
-        return '<li><a class="result" href="' + pageHref(p.id) + '">' +
-          (p.dir ? '<span class="path">' + esc(crumbPath(p)) + "</span>" : "") +
-          "<h3>" + highlight(p.title, parsed.words) + "</h3>" +
-          (snip ? "<p>" + highlight(snip, parsed.words) + "</p>" : "") +
-          '<span class="tags">' + p.tags.map(function (t) { return '<span class="chip chip-sm">' + esc(t) + "</span>"; }).join("") + "</span></a></li>";
+        var p = h.p, snip = snippet(p, parsed.words);
+        return "<li><h2><a href=\"" + pageHref(p.id) + '">' + highlight(p.title, parsed.words) + "</a></h2>" +
+          (p.dir ? '<div class="path">' + esc(crumbPath(p)).replace(/ \/ /g, " › ") + "</div>" : "") +
+          (snip ? "<p>" + highlight(snip, parsed.words) + "</p>" : "") + "</li>";
       }).join("") + "</ul>";
-      if (res.hits.length > 50) html += '<p class="note">Showing the first 50. Add a tag or another word to narrow it down.</p>';
+      if (res.hits.length > 50) html += '<p class="result-count">Showing the first 50. Add a tag or another word to narrow it down.</p>';
     }
     view.innerHTML = html + "</div>";
-  }
-
-  function breadcrumbs(dir, last) {
-    var parts = dir ? dir.split("/") : [];
-    var items = ['<li><a href="#/">Home</a></li>'];
-    parts.forEach(function (_, i) {
-      var d = parts.slice(0, i + 1).join("/");
-      var isLast = !last && i === parts.length - 1;
-      items.push("<li>" + (isLast ? '<span aria-current="page">' + esc(dirTitle(d)) + "</span>" : '<a href="' + dirHref(d) + '">' + esc(dirTitle(d)) + "</a>") + "</li>");
-    });
-    if (last) items.push('<li><span aria-current="page">' + esc(last) + "</span></li>");
-    return '<nav aria-label="Breadcrumb"><ol class="crumbs">' + items.join("") + "</ol></nav>";
   }
 
   function renderCategory(dir) {
     var info = dirInfo(dir);
     setTitle(dirTitle(dir));
-    var pages = pagesIn(dir);
-    var subs = childDirs(dir);
-    var html = '<div class="wrap">' + breadcrumbs(dir) +
-      '<div class="view-head"><h1>' + esc(dirTitle(dir)) + "</h1>" + (info.description ? "<p>" + esc(info.description) + "</p>" : "") + "</div>";
-    if (pages.length) html += '<h2 class="section-title">Pages</h2><ul class="cards">' + pages.map(cardForPage).join("") + "</ul>";
-    if (subs.length) html += '<h2 class="section-title">Sections</h2><ul class="cards">' + subs.map(cardForDir).join("") + "</ul>";
-    if (!pages.length && !subs.length) html += '<div class="empty"><h2>This category is empty</h2><p>Add a Markdown file in this folder.</p></div>';
-    view.innerHTML = html + "</div>";
+    var pages = pagesIn(dir), subs = childDirs(dir);
+    var main = breadcrumbs(dir) + '<div class="cat-head"><h1>' + esc(dirTitle(dir)) + "</h1>" + (info.description ? "<p>" + esc(info.description) + "</p>" : "") + "</div>";
+    if (pages.length) main += '<h2 class="list-title">Pages</h2><ul class="doc-list">' + pages.map(docListItem).join("") + "</ul>";
+    if (subs.length) main += '<h2 class="list-title">Sections</h2><ul class="doc-list">' + subs.map(function (d) {
+      var i = dirInfo(d);
+      return '<li><a href="' + dirHref(d) + '">' + esc(dirTitle(d)) + "</a><p>" + (i.description ? esc(i.description) + " " : "") + plural(countUnder(d), "page") + "</p></li>";
+    }).join("") + "</ul>";
+    if (!pages.length && !subs.length) main += '<div class="admonition"><h3>This category is empty</h3><p>Add a Markdown file in this folder.</p></div>';
+    view.innerHTML = withSidebar(dir, null, true, main);
   }
 
   function renderMissing(path) {
+    noSidebar();
     setTitle("Not found");
-    view.innerHTML = '<div class="wrap"><div class="empty"><h2>Page not found</h2><p>There is no page at <code>' + esc(path) +
-      '</code>. Try the search above, or go back <a href="#/">home</a>.</p></div></div>';
+    view.innerHTML = '<div class="container search-page"><h1>Page not found</h1><div class="admonition"><p>There is no page at <code>' + esc(path) +
+      '</code>. Use the search box, or go back <a href="#/">home</a>.</p></div></div>';
   }
 
   // ---------- markdown ----------
@@ -403,11 +429,11 @@
       h.id = id;
       if (h.tagName !== "H1") {
         var a = document.createElement("a");
-        a.className = "anchor";
+        a.className = "hash-link";
         a.href = "#/" + encPath(currentPageId) + "?h=" + encodeURIComponent(id);
         a.textContent = "#";
-        a.setAttribute("aria-label", "Link to this section");
-        h.insertBefore(a, h.firstChild);
+        a.setAttribute("aria-label", "Direct link to " + h.textContent.replace(/#$/, ""));
+        h.appendChild(a);
       }
     });
     // code blocks: highlight + copy button
@@ -441,22 +467,12 @@
     setTitle(p.title);
     currentDir = p.dir;
     currentPageId = id;
-    var tabs = pagesIn(p.dir);
-    var subs = childDirs(p.dir);
+    var siblings = pagesIn(p.dir);
 
-    var html = '<div class="wrap">' + breadcrumbs(p.dir, p.title);
-    if (tabs.length > 1) {
-      html += '<nav class="tabs" aria-label="Pages in ' + esc(p.dir ? dirTitle(p.dir) : "this category") + '">' + tabs.map(function (t) {
-        return '<a href="' + pageHref(t.id) + '"' + (t.id === id ? ' aria-current="page"' : "") + ">" + esc(t.title) + "</a>";
-      }).join("") + "</nav>";
-    }
-    if (subs.length) {
-      html += '<div class="subcats"><span>Sections in ' + esc(p.dir ? dirTitle(p.dir) : "this category") + "</span>" + subs.map(function (d) {
-        return '<a class="chip" href="' + dirHref(d) + '">' + esc(dirTitle(d)) + " <small>" + countUnder(d) + "</small></a>";
-      }).join("") + "</div>";
-    }
-    html += '<div class="doc" id="doc"><article class="prose" id="prose" aria-busy="true"><p class="note">Loading…</p></article><aside class="toc" id="toc" aria-label="On this page"></aside></div>';
-    view.innerHTML = html + "</div>";
+    var main = '<div class="docs-grid"><div class="docs-col">' + breadcrumbs(p.dir, p.title) +
+      '<article class="markdown" id="prose" aria-busy="true"><p>Loading…</p></article><div id="after"></div></div>' +
+      '<aside class="toc" id="toc" aria-label="On this page"></aside></div>';
+    view.innerHTML = withSidebar(p.dir, id, false, main);
 
     return fetch(CONTENT + encPath(id) + ".md", { cache: "no-cache" }).then(function (res) {
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -471,13 +487,11 @@
       prose.removeAttribute("aria-busy");
       var heads = decorateArticle(prose);
 
-      // on this page
       var toc = document.getElementById("toc");
       if (heads.length >= 2) {
-        document.getElementById("doc").classList.add("has-toc");
         toc.innerHTML = "<h2>On this page</h2><ul>" + heads.map(function (h) {
           return '<li class="l' + h.tagName.charAt(1) + '"><a href="#/' + encPath(id) + "?h=" + encodeURIComponent(h.id) + '" data-id="' + esc(h.id) + '">' +
-            esc(h.textContent.replace(/^#/, "")) + "</a></li>";
+            esc(h.textContent.replace(/#$/, "")) + "</a></li>";
         }).join("") + "</ul>";
         if ("IntersectionObserver" in window) {
           var links = {};
@@ -493,22 +507,17 @@
         }
       } else toc.remove();
 
-      // previous / next within the category
-      var i = tabs.indexOf(p);
-      var pager = "";
-      if (tabs.length > 1) {
-        if (i > 0) pager += '<a class="prev" href="' + pageHref(tabs[i - 1].id) + '"><small>Previous</small>' + esc(tabs[i - 1].title) + "</a>";
-        if (i < tabs.length - 1) pager += '<a class="next" href="' + pageHref(tabs[i + 1].id) + '"><small>Next</small>' + esc(tabs[i + 1].title) + "</a>";
-      }
-      var meta = "";
-      if (CONFIG.repo) meta = '<p class="page-meta"><a href="https://github.com/' + CONFIG.repo + "/edit/" + CONFIG.branch + "/" + CONFIG.contentDir + "/" + encPath(id) + '.md" target="_blank" rel="noopener noreferrer">Edit this page on GitHub</a></p>';
-      var after = document.createElement("div");
-      after.innerHTML = (pager ? '<nav class="pager" aria-label="Previous and next page">' + pager + "</nav>" : "") + meta;
-      prose.parentNode.parentNode.appendChild(after);
+      var after = "";
+      if (CONFIG.repo) after += '<div class="edit-row"><a href="https://github.com/' + CONFIG.repo + "/edit/" + CONFIG.branch + "/" + CONFIG.contentDir + "/" + encPath(id) + '.md" target="_blank" rel="noopener noreferrer">' + ICON_EDIT + " Edit this page</a></div>";
+      var i = siblings.indexOf(p), pag = "";
+      if (i > 0) pag += '<a class="prev" href="' + pageHref(siblings[i - 1].id) + '"><small>Previous</small><b>« ' + esc(siblings[i - 1].title) + "</b></a>";
+      if (i >= 0 && i < siblings.length - 1) pag += '<a class="next" href="' + pageHref(siblings[i + 1].id) + '"><small>Next</small><b>' + esc(siblings[i + 1].title) + " »</b></a>";
+      if (pag) after += '<nav class="pagination" aria-label="Docs pages">' + pag + "</nav>";
+      document.getElementById("after").innerHTML = after;
     }).catch(function (err) {
       if (token !== renderToken) return;
       var prose = document.getElementById("prose");
-      if (prose) prose.innerHTML = '<div class="empty"><h2>Could not load this page</h2><p>Expected <code>' + esc(CONTENT + id + ".md") + "</code> (" + esc(err.message) + "). Rebuild the index if you renamed or deleted the file.</p></div>";
+      if (prose) prose.innerHTML = '<div class="admonition"><h3>Could not load this page</h3><p>Expected <code>' + esc(CONTENT + id + ".md") + "</code> (" + esc(err.message) + "). Rebuild the index if you renamed or deleted the file.</p></div>";
     });
   }
 
@@ -548,13 +557,19 @@
   }
   function start() {
     var repoLink = document.getElementById("repo-link");
-    if (CONFIG.repo) { repoLink.href = "https://github.com/" + CONFIG.repo; repoLink.hidden = false; }
+    if (CONFIG.repo) {
+      repoLink.href = "https://github.com/" + CONFIG.repo; repoLink.hidden = false;
+      var gh = document.getElementById("nav-gh"); gh.href = repoLink.href; gh.hidden = false;
+    }
 
-    document.getElementById("theme-toggle").addEventListener("click", function () {
-      var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", next);
-      try { localStorage.setItem("nexus-theme", next); } catch (e) {}
-    });
+    var menuBtn = document.getElementById("menu-btn");
+    function setDrawer(open) {
+      document.body.classList.toggle("sidebar-open", open);
+      menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    menuBtn.addEventListener("click", function () { setDrawer(!document.body.classList.contains("sidebar-open")); });
+    document.getElementById("backdrop").addEventListener("click", function () { setDrawer(false); });
+    window.addEventListener("hashchange", function () { setDrawer(false); });
     bindSearchInput(topInput, document.getElementById("search-top"), false);
     document.addEventListener("keydown", function (e) {
       var tag = (e.target.tagName || "").toLowerCase();
@@ -565,7 +580,7 @@
     });
     // in-page anchors (TOC and heading permalinks): scroll without re-rendering
     view.addEventListener("click", function (e) {
-      var a = e.target.closest && e.target.closest("a.anchor, .toc a");
+      var a = e.target.closest && e.target.closest("a.hash-link, .toc a");
       if (!a) return;
       e.preventDefault();
       var el = document.getElementById(new URL(a.href).hash.split("h=")[1] ? decodeURIComponent(new URL(a.href).hash.split("h=")[1]) : "");
