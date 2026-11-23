@@ -4,6 +4,7 @@
 // (A GitHub Action also runs this on every push, so you can just add .md files.)
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -138,3 +139,15 @@ pages.sort((a, b) => collator.compare(a.id, b.id));
 const manifest = { version: 1, pages, categories };
 await writeFile(path.join(root, "manifest.json"), JSON.stringify(manifest) + "\n");
 console.log(`manifest.json: ${pages.length} page(s), ${Object.keys(categories).length} categor${Object.keys(categories).length === 1 ? "y" : "ies"}`);
+
+// ---------- cache busting ----------
+// GitHub Pages lets browsers cache CSS/JS for a while. Stamp index.html with a hash of
+// the assets so a changed file is always fetched fresh.
+const siteDir = path.resolve(here, "..");
+const hash = createHash("sha1");
+for (const f of ["assets/style.css", "assets/app.js", "assets/img/logo.svg"]) hash.update(await readFile(path.join(siteDir, f)));
+const v = hash.digest("hex").slice(0, 8);
+const indexPath = path.join(siteDir, "index.html");
+const html = await readFile(indexPath, "utf8");
+const stamped = html.replace(/(assets\/(?:style\.css|app\.js|img\/logo\.svg))(\?v=[0-9a-f]+)?/g, `$1?v=${v}`);
+if (stamped !== html) { await writeFile(indexPath, stamped); console.log(`index.html: assets stamped ?v=${v}`); }
