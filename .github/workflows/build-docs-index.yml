@@ -1,8 +1,9 @@
-name: Build docs index
+name: Build docs site
 
-# Rebuilds docs/documentation/manifest.json (and the asset version stamp in index.html) whenever documentation changes,
-# so you can add or edit .md files (even from the GitHub web editor) and the
-# search + navigation update on their own.
+# Safety net: rebuilds the generated pages (docs/doc, sitemap, search index, ...)
+# when documentation or site files change on main, e.g. after editing a .md
+# file in the GitHub web editor. Locally, run `node docs/scripts/build.mjs`
+# before you commit.
 
 on:
   push:
@@ -10,26 +11,27 @@ on:
     paths:
       - "docs/documentation/**"
       - "docs/assets/**"
-      - "docs/scripts/build-index.mjs"
+      - "docs/scripts/**"
+      - "docs/site.config.json"
 
 permissions:
   contents: write
 
 jobs:
-  build-index:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node docs/scripts/build-index.mjs
-      - name: Commit manifest if it changed
+      - run: node docs/scripts/build.mjs
+      - name: Commit generated files if they changed
         run: |
-          if ! git diff --quiet -- docs/documentation/manifest.json docs/index.html; then
+          git add -A docs
+          if ! git diff --cached --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add docs/documentation/manifest.json docs/index.html
-            git commit -m "chore(docs): rebuild documentation index"
+            git commit -m "chore(docs): rebuild site"
             git push
           fi

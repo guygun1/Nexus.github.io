@@ -1,7 +1,8 @@
 # Nexus.github.io
 
-Documentation site, served by GitHub Pages from the `docs/` folder.
+Documentation site, served by GitHub Pages from the `docs/` folder (Settings, Pages, branch `main`, folder `/docs`).
 
-- Content: `docs/documentation/` (folders are categories, `.md` files are pages). See `docs/documentation/README.md`.
-- Index: `node docs/scripts/build-index.mjs` regenerates `docs/documentation/manifest.json`. The GitHub Action in `.github/workflows/` does this on every push.
-- Preview locally: `cd docs && python -m http.server`, then open http://localhost:8000
+- Write pages in `docs/documentation/` (folders are categories, `.md` files are pages). See `docs/documentation/README.md`.
+- Build: `node docs/scripts/build.mjs`. It generates a real HTML page per document in `docs/doc/`, plus `sitemap.xml`, `robots.txt`, the search index and `404.html`. Commit the generated files.
+- Settings (site URL, repo, AdSense): `docs/site.config.json`.
+- Preview: `cd docs && python -m http.server`, then open http://localhost:8000
