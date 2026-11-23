@@ -1,0 +1,12 @@
+{
+  "siteName": "Nexus docs",
+  "siteDescription": "Nexus documentation: guides and write-ups on coding, rendering and more. Search by keyword or filter by tag.",
+  "siteUrl": "https://guygun1.github.io/Nexus.github.io",
+  "repo": "guygun1/Nexus.github.io",
+  "branch": "main",
+  "contentDir": "docs/documentation",
+  "adsense": {
+    "client": "ca-pub-1710107865568376",
+    "slot": ""
+  }
+}

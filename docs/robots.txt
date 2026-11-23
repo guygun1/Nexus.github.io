@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://guygun1.github.io/Nexus.github.io/sitemap.xml
